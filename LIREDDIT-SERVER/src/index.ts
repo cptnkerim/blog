@@ -1,21 +1,35 @@
-import { MikroORM } from '@mikro-orm/core';
-import { Post } from './entities/Post';
-import mikroOrmConfig from './mikro-orm.config';
+import "reflect-metadata";
+import { MikroORM } from "@mikro-orm/core";
+import mikroOrmConfig from "./mikro-orm.config";
+import express from "express";
+import { ApolloServer } from "apollo-server-express";
+import { buildSchema } from "type-graphql";
+import { PostResolver } from "./resolvers/post";
 
 const main = async () => {
-    const orm = await MikroORM.init(mikroOrmConfig);
-    const fork = orm.em.fork();
-    await orm.getMigrator().up();
+  const orm = await MikroORM.init(mikroOrmConfig);
 
-    const generator = orm.getSchemaGenerator();
-    await generator.updateSchema();
+  const fork = orm.em.fork();
+  await orm.getMigrator().up();
 
-    const post = fork.create(Post, { title: 'The first Post' });
-    await fork.persistAndFlush(post); 
+  const generator = orm.getSchemaGenerator();
+  await generator.updateSchema();
 
-    const posts = await fork.find(Post, {}); 
-    console.log(posts)
-    // await orm.em.nativeInsert(Post, { title: 'The second Post' });
-}
+  const app = express();
+  const apolloServer = new ApolloServer({
+    schema: await buildSchema({
+      resolvers: [PostResolver],
+      validate: false,
+    }),
+    context: () => ({ fork }),
+  });
 
-main().catch(error => console.log(error));
+  await apolloServer.start();
+  apolloServer.applyMiddleware({ app });
+
+  app.listen(5000, () => {
+    console.log("server started on localhost:5000");
+  });
+};
+
+main().catch((error) => console.log(error));
